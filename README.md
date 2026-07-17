@@ -227,6 +227,66 @@ Desktop/
 - **前端**: Vue3 + TypeScript + Element Plus + Vite + vite-plugin-qiankun
 - **后端**: Java Spring Boot 3.2 + Spring Data JPA
 - **数据库**: MySQL 8.0
-- **消息通知**: 企业微信机器人 Webhook（模拟模式）
+- **消息通知**: 企业微信群机器人 Webhook
 - **微前端**: qiankun
 - **构建**: Maven
+
+## 🔧 常见问题
+
+### 1. 提交审批失败
+
+**原因**: 前端请求没有带 `X-User-Id` 头
+
+**解决**: 检查 `api/index.ts` 中的请求拦截器，确保使用正确的 localStorage key：
+```typescript
+// 基座用 jwt_token，兼容 token
+const token = localStorage.getItem('jwt_token') || localStorage.getItem('token')
+// 基座用 user_info，兼容 user
+const userStr = localStorage.getItem('user_info') || localStorage.getItem('user')
+```
+
+### 2. 看不到审批人
+
+**原因**: 审批人通过 `oa_approvers` 表配置
+
+**解决**: 检查数据库中的审批人配置：
+```sql
+SELECT * FROM oa_approvers WHERE user_id = 你的用户ID;
+```
+
+### 3. 企业微信通知不发送
+
+**原因**: Webhook URL 未配置或配置错误
+
+**解决**: 检查 `application.yml` 中的 Webhook 配置：
+```yaml
+wecom:
+  enabled: true
+  webhook-url: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY
+```
+
+### 4. 审批人如何确定
+
+系统通过 `oa_approvers` 表自动匹配审批人：
+- 当前用户登录后，系统根据 `user_id` 查找对应的 `approver_id`
+- 审批人信息（姓名、部门、职位）从 `oa_wecom_contacts` 表获取
+- 如果没有配置审批人，申请将无法提交
+
+## 📊 数据流程
+
+```
+用户提交申请
+    ↓
+1. 创建申请记录（oa_applications）
+2. 查找审批人（oa_approvers）
+3. 创建审批记录（oa_approval_records）
+4. 发送企业微信通知（Webhook）
+5. 创建系统通知（oa_notifications）
+    ↓
+审批人审批
+    ↓
+1. 更新审批记录状态
+2. 更新申请状态
+3. 发送企业微信结果通知
+4. 创建系统通知
+```
