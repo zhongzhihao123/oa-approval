@@ -5,18 +5,31 @@ const api = axios.create({
   timeout: 15000,
 })
 
-const token = localStorage.getItem('token')
-if (token) {
-  api.defaults.headers.common['Authorization'] = `Bearer ${token}`
-}
-
-// Get current user info from localStorage
-const userStr = localStorage.getItem('user')
-const user = userStr ? JSON.parse(userStr) : null
-if (user) {
-  api.defaults.headers.common['X-User-Id'] = user.id
-  api.defaults.headers.common['X-User-Name'] = user.name || user.username
-}
+// 请求拦截器 - 动态添加认证头
+api.interceptors.request.use(
+  (config) => {
+    // 基座用 jwt_token，兼容 token
+    const token = localStorage.getItem('jwt_token') || localStorage.getItem('token')
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`
+    }
+    
+    // 基座用 user_info，兼容 user
+    const userStr = localStorage.getItem('user_info') || localStorage.getItem('user')
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr)
+        config.headers['X-User-Id'] = user.id
+        config.headers['X-User-Name'] = user.name || user.username
+      } catch (e) {
+        console.error('Failed to parse user info:', e)
+      }
+    }
+    
+    return config
+  },
+  (error) => Promise.reject(error)
+)
 
 api.interceptors.response.use(
   (res) => {
@@ -57,6 +70,19 @@ export interface Approver {
   approverId: number; approverName: string; isDefault: boolean
 }
 
+export interface WecomContact {
+  id: number; userId: number; username: string
+  wecomUserid: string; wecomName: string; wecomDepartment: string
+  wecomPosition: string; wecomMobile: string; wecomEmail: string
+  wecomAvatar: string | null; isActive: boolean
+}
+
+export interface MyApprover {
+  approverId: number; approverName: string
+  wecomName?: string; wecomDepartment?: string
+  wecomPosition?: string; wecomAvatar?: string | null
+}
+
 // Leave types
 export const fetchLeaveTypes = () => api.get<any, LeaveType[]>('/leave-types')
 
@@ -84,3 +110,11 @@ export const fetchApprovers = () => api.get<any, Approver[]>('/approvers')
 
 // Dashboard
 export const fetchDashboard = () => api.get<any, any>('/dashboard')
+
+// WeCom Integration
+export const fetchWecomContacts = () => api.get<any, WecomContact[]>('/wecom/contacts')
+export const fetchMyApprover = () => api.get<any, MyApprover>('/wecom/approver')
+export const fetchWecomDepartments = () => api.get<any, any[]>('/wecom/departments')
+export const fetchWecomMembers = (departmentId: number) => api.get<any, any[]>(`/wecom/members/${departmentId}`)
+export const testWecomNotify = (userId: string, title?: string, content?: string) => 
+  api.post<any, string>('/wecom/test-notify', { userId, title, content })

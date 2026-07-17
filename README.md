@@ -70,32 +70,57 @@
 | GET | `/api/oa/approvers` | 获取审批人配置 |
 | GET | `/api/oa/dashboard` | 审批仪表盘 |
 | POST | `/api/oa/notify/wechat` | 手动触发企业微信通知 |
+| GET | `/api/oa/wecom/contacts` | 获取企业微信联系人列表 |
+| GET | `/api/oa/wecom/approver` | 获取当前用户的审批人（含企微信息） |
+| GET | `/api/oa/wecom/departments` | 获取企微部门列表 |
+| GET | `/api/oa/wecom/members/{deptId}` | 获取企微部门成员 |
+| POST | `/api/oa/wecom/test-notify` | 测试企微消息发送 |
 
-## 📱 企业微信通知
+## 📱 企业微信集成
 
-审批系统到达审批节点时自动通知审批人：
-- **提交申请** → 通知第一级审批人
-- **审批通过** → 通知申请人
-- **审批驳回** → 通知申请人
+### 功能特性
+1. **通讯录同步**: 从企业微信获取部门和成员信息
+2. **审批人展示**: 发起审批时自动显示审批人（含企微部门/职位）
+3. **消息通知**: 审批事件通过企业微信应用消息 + 群机器人双通道通知
+4. **联系人映射**: 系统用户与企业微信用户通过 `oa_wecom_contacts` 表关联
 
-### 消息格式（Markdown）
-```markdown
-## 📋 新审批待处理
-> **申请人**: 张三
-> **假期类型**: 年假
-> **请假天数**: 3.0 天
-> **申请编号**: OA-20260716-001
-> **请假原因**: 回老家探亲
-> 请尽快审批处理
-```
+### 通知流程
+- **提交申请** → 自动查找审批人 → 发送企微应用消息 + 群机器人 Webhook
+- **审批通过/驳回** → 通知申请人企微消息
 
 ### 配置
-在 `application.yml` 中配置企业微信 Webhook：
+在 `application.yml` 中配置企业微信：
 ```yaml
-wechat:
-  webhook:
-    url: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY
-    enabled: true
+wecom:
+  enabled: true                    # 启用企业微信集成
+  corp-id: YOUR_CORP_ID           # 企业ID（管理后台获取）
+  agent-id: YOUR_AGENT_ID         # 应用AgentId
+  corp-secret: YOUR_CORP_SECRET   # 应用Secret
+  webhook-url: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY  # 群机器人
+```
+
+### Mock 模式
+当 `wecom.enabled: false` 时，系统使用模拟数据：
+- 通讯录返回系统内置用户
+- 消息通知仅打印日志
+- 适合本地开发和演示
+
+### 数据库表
+```sql
+CREATE TABLE oa_wecom_contacts (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT NOT NULL,          -- 系统用户ID
+  wecom_userid VARCHAR(100),         -- 企微userid
+  wecom_name VARCHAR(50),            -- 企微姓名
+  wecom_department VARCHAR(100),     -- 企微部门
+  wecom_position VARCHAR(100),       -- 企微职位
+  wecom_mobile VARCHAR(20),          -- 手机号
+  wecom_email VARCHAR(100),          -- 邮箱
+  wecom_avatar VARCHAR(500),         -- 头像URL
+  is_active TINYINT DEFAULT 1,
+  UNIQUE KEY uk_user (user_id),
+  UNIQUE KEY uk_wecom_userid (wecom_userid)
+);
 ```
 
 ## 🚀 快速启动
